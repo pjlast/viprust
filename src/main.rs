@@ -298,9 +298,12 @@ fn main() -> io::Result<()> {
         solock.flush().unwrap();
     }
 
-    solock
-        .queue(cursor::SetCursorStyle::DefaultUserShape)
-        .unwrap();
+    queue!(
+        solock,
+        cursor::SetCursorStyle::DefaultUserShape,
+        terminal::Clear(terminal::ClearType::All),
+    )
+    .unwrap();
     solock.flush().unwrap();
     disable_raw_mode().unwrap();
 
