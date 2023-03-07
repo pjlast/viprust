@@ -27,6 +27,7 @@ enum EditorAction {
     Backspace,
     SplitLine,
     InsertChar(char),
+    NoOp,
 }
 
 struct EditorFile {
@@ -65,30 +66,27 @@ impl Editor {
     fn process_input(&self, event: Event) -> EditorAction {
         match self.mode {
             EditorMode::Normal => match event {
-                Event::Key(keyevent) => match keyevent {
-                    KeyEvent {
-                        code: KeyCode::Up, ..
-                    } => EditorAction::MoveUp,
-                    KeyEvent {
-                        code: KeyCode::Down,
-                        ..
-                    } => EditorAction::MoveDown,
-                    _ => EditorAction::Quit,
+                Event::Key(KeyEvent { code, .. }) => match code {
+                    KeyCode::Up | KeyCode::Char('k') => EditorAction::MoveUp,
+                    KeyCode::Down | KeyCode::Char('j') => EditorAction::MoveDown,
+                    KeyCode::Right | KeyCode::Char('l') => EditorAction::MoveRight,
+                    KeyCode::Left | KeyCode::Char('h') => EditorAction::MoveLeft,
+                    KeyCode::Char('i') => EditorAction::InsertMode,
+                    KeyCode::Char('q') => EditorAction::Quit,
+                    KeyCode::Char('s') => EditorAction::Save,
+                    _ => EditorAction::NoOp,
                 },
-                _ => EditorAction::Quit,
+                _ => EditorAction::NoOp,
             },
             EditorMode::Insert => match event {
-                Event::Key(keyevent) => match keyevent {
-                    KeyEvent {
-                        code: KeyCode::Esc, ..
-                    } => EditorAction::NormalMode,
-                    KeyEvent {
-                        code: KeyCode::Char(c),
-                        ..
-                    } => EditorAction::InsertChar(c),
-                    _ => EditorAction::Quit,
+                Event::Key(KeyEvent { code, .. }) => match code {
+                    KeyCode::Esc => EditorAction::NormalMode,
+                    KeyCode::Backspace => EditorAction::Backspace,
+                    KeyCode::Enter => EditorAction::SplitLine,
+                    KeyCode::Char(c) => EditorAction::InsertChar(c),
+                    _ => EditorAction::NoOp,
                 },
-                _ => EditorAction::Quit,
+                _ => EditorAction::NoOp,
             },
         }
     }
@@ -293,6 +291,7 @@ fn main() -> io::Result<()> {
                 .unwrap();
                 solock.queue(cursor::RestorePosition).unwrap();
             }
+            EditorAction::NoOp => continue,
         };
 
         solock.flush().unwrap();
@@ -301,6 +300,7 @@ fn main() -> io::Result<()> {
     queue!(
         solock,
         cursor::SetCursorStyle::DefaultUserShape,
+        cursor::MoveTo(0, 0),
         terminal::Clear(terminal::ClearType::All),
     )
     .unwrap();
