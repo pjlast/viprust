@@ -175,6 +175,11 @@ fn main() -> io::Result<()> {
                         cursor::RestorePosition,
                     )?;
                 }
+                let row_len = editor.file.lines[editor.file.row_pos].chars.len();
+                if editor.file.col_pos > row_len {
+                    editor.file.col_pos = row_len;
+                    queue!(solock, cursor::MoveToColumn(row_len as u16))?;
+                }
             }
             EditorAction::MoveUp => {
                 if editor.file.row_pos > 0 {
@@ -191,6 +196,11 @@ fn main() -> io::Result<()> {
                         Print(&editor.file.lines[editor.file.row_pos].chars),
                         cursor::RestorePosition,
                     )?;
+                }
+                let row_len = editor.file.lines[editor.file.row_pos].chars.len();
+                if editor.file.col_pos > row_len {
+                    editor.file.col_pos = row_len;
+                    queue!(solock, cursor::MoveToColumn(row_len as u16))?;
                 }
             }
             EditorAction::MoveRight => {
