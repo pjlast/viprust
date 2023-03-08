@@ -34,6 +34,7 @@ struct EditorFile {
     lines: Vec<Line>,
     row_pos: usize,
     col_pos: usize,
+    scroll_pos: usize,
 }
 
 struct Editor {
@@ -50,6 +51,7 @@ impl Editor {
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
+            scroll_pos: 0,
         };
 
         let lines = io::BufReader::new(file).lines();
@@ -109,6 +111,7 @@ fn main() -> io::Result<()> {
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
+            scroll_pos: 0,
         },
         num_rows: (window_size.1 as usize),
         num_cols: (window_size.0 as usize),
@@ -161,11 +164,33 @@ fn main() -> io::Result<()> {
                     editor.file.row_pos += 1;
                     solock.queue(cursor::MoveDown(1)).unwrap();
                 }
+                if editor.file.row_pos >= editor.file.scroll_pos + editor.num_rows {
+                    editor.file.scroll_pos += 1;
+                    queue!(
+                        solock,
+                        cursor::SavePosition,
+                        cursor::MoveToColumn(0),
+                        terminal::ScrollUp(1),
+                        Print(&editor.file.lines[editor.file.row_pos].chars),
+                        cursor::RestorePosition,
+                    )?;
+                }
             }
             EditorAction::MoveUp => {
                 if editor.file.row_pos > 0 {
                     editor.file.row_pos -= 1;
                     solock.queue(cursor::MoveUp(1)).unwrap();
+                }
+                if editor.file.row_pos < editor.file.scroll_pos {
+                    editor.file.scroll_pos -= 1;
+                    queue!(
+                        solock,
+                        cursor::SavePosition,
+                        cursor::MoveToColumn(0),
+                        terminal::ScrollDown(1),
+                        Print(&editor.file.lines[editor.file.row_pos].chars),
+                        cursor::RestorePosition,
+                    )?;
                 }
             }
             EditorAction::MoveRight => {
