@@ -104,26 +104,21 @@ impl Editor {
             .take(self.num_rows)
             .peekable();
 
-        queue!(
-            solock,
-            cursor::SavePosition,
-            terminal::Clear(terminal::ClearType::All),
-            cursor::MoveTo(0, 0),
-        )
-        .unwrap();
+        queue!(solock, cursor::SavePosition, cursor::MoveTo(0, 0),).unwrap();
         while let Some(line) = iter.next() {
             if iter.peek().is_some() {
                 queue!(
                     solock,
-                    Print(format!(
-                        "{}\r\n",
+                    Print(
                         &line
                             .chars
                             .chars()
                             .skip(self.file.col_scroll_pos)
                             .take(self.num_cols)
                             .collect::<String>()
-                    )),
+                    ),
+                    terminal::Clear(terminal::ClearType::UntilNewLine),
+                    cursor::MoveToNextLine(1),
                 )
                 .unwrap();
             } else {
@@ -136,6 +131,7 @@ impl Editor {
                             .take(self.num_cols)
                             .collect::<String>()
                     ),
+                    terminal::Clear(terminal::ClearType::UntilNewLine),
                 )
                 .unwrap();
             }
@@ -218,14 +214,28 @@ fn main() -> io::Result<()> {
                         cursor::SavePosition,
                         cursor::MoveToColumn(0),
                         terminal::ScrollUp(1),
-                        Print(&editor.file.lines[editor.file.row_pos].chars),
+                        Print(
+                            &editor.file.lines[editor.file.row_pos]
+                                .chars
+                                .chars()
+                                .skip(editor.file.col_scroll_pos)
+                                .take(editor.num_cols)
+                                .collect::<String>()
+                        ),
                         cursor::RestorePosition,
                     )?;
                 }
                 let row_len = editor.file.lines[editor.file.row_pos].chars.len();
+                if editor.file.col_scroll_pos > row_len {
+                    editor.file.col_scroll_pos = row_len;
+                    editor.print_screen(&mut solock);
+                }
                 if editor.file.col_pos > row_len {
                     editor.file.col_pos = row_len;
-                    queue!(solock, cursor::MoveToColumn(row_len as u16))?;
+                    queue!(
+                        solock,
+                        cursor::MoveToColumn((row_len - editor.file.col_scroll_pos) as u16)
+                    )?;
                 }
             }
             EditorAction::MoveUp => {
@@ -240,14 +250,28 @@ fn main() -> io::Result<()> {
                         cursor::SavePosition,
                         cursor::MoveToColumn(0),
                         terminal::ScrollDown(1),
-                        Print(&editor.file.lines[editor.file.row_pos].chars),
+                        Print(
+                            &editor.file.lines[editor.file.row_pos]
+                                .chars
+                                .chars()
+                                .skip(editor.file.col_scroll_pos)
+                                .take(editor.num_cols)
+                                .collect::<String>()
+                        ),
                         cursor::RestorePosition,
                     )?;
                 }
                 let row_len = editor.file.lines[editor.file.row_pos].chars.len();
+                if editor.file.col_scroll_pos > row_len {
+                    editor.file.col_scroll_pos = row_len;
+                    editor.print_screen(&mut solock);
+                }
                 if editor.file.col_pos > row_len {
                     editor.file.col_pos = row_len;
-                    queue!(solock, cursor::MoveToColumn(row_len as u16))?;
+                    queue!(
+                        solock,
+                        cursor::MoveToColumn((row_len - editor.file.col_scroll_pos) as u16)
+                    )?;
                 }
             }
             EditorAction::MoveRight => {
