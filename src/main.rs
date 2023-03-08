@@ -3,7 +3,7 @@ use crossterm::style::Print;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::{cursor, queue, terminal, QueueableCommand};
 use std::fs::File;
-use std::io::{self, stdout, BufRead, Write};
+use std::io::{self, stdout, BufRead, StdoutLock, Write};
 use std::{env, fs};
 
 struct Line {
@@ -34,7 +34,8 @@ struct EditorFile {
     lines: Vec<Line>,
     row_pos: usize,
     col_pos: usize,
-    scroll_pos: usize,
+    row_scroll_pos: usize,
+    col_scroll_pos: usize,
 }
 
 struct Editor {
@@ -51,7 +52,8 @@ impl Editor {
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
-            scroll_pos: 0,
+            row_scroll_pos: 0,
+            col_scroll_pos: 0,
         };
 
         let lines = io::BufReader::new(file).lines();
@@ -92,6 +94,54 @@ impl Editor {
             },
         }
     }
+
+    fn print_screen(&self, solock: &mut StdoutLock) {
+        let mut iter = self
+            .file
+            .lines
+            .iter()
+            .skip(self.file.row_scroll_pos)
+            .take(self.num_rows)
+            .peekable();
+
+        queue!(
+            solock,
+            cursor::SavePosition,
+            terminal::Clear(terminal::ClearType::All),
+            cursor::MoveTo(0, 0),
+        )
+        .unwrap();
+        while let Some(line) = iter.next() {
+            if iter.peek().is_some() {
+                queue!(
+                    solock,
+                    Print(format!(
+                        "{}\r\n",
+                        &line
+                            .chars
+                            .chars()
+                            .skip(self.file.col_scroll_pos)
+                            .take(self.num_cols)
+                            .collect::<String>()
+                    )),
+                )
+                .unwrap();
+            } else {
+                queue!(
+                    solock,
+                    Print(
+                        line.chars
+                            .chars()
+                            .skip(self.file.col_scroll_pos)
+                            .take(self.num_cols)
+                            .collect::<String>()
+                    ),
+                )
+                .unwrap();
+            }
+        }
+        queue!(solock, cursor::RestorePosition).unwrap();
+    }
 }
 
 fn main() -> io::Result<()> {
@@ -111,7 +161,8 @@ fn main() -> io::Result<()> {
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
-            scroll_pos: 0,
+            row_scroll_pos: 0,
+            col_scroll_pos: 0,
         },
         num_rows: (window_size.1 as usize),
         num_cols: (window_size.0 as usize),
@@ -132,15 +183,7 @@ fn main() -> io::Result<()> {
         .queue(cursor::SetCursorStyle::SteadyBlock)
         .unwrap();
 
-    let mut iter = editor.file.lines.iter().take(editor.num_rows).peekable();
-
-    while let Some(line) = iter.next() {
-        if iter.peek().is_some() {
-            write!(solock, "{}\r\n", line.chars).unwrap();
-        } else {
-            write!(solock, "{}", line.chars).unwrap();
-        }
-    }
+    editor.print_screen(&mut solock);
 
     solock.queue(cursor::MoveTo(0, 0)).unwrap();
 
@@ -157,6 +200,10 @@ fn main() -> io::Result<()> {
                 if editor.file.col_pos > 0 {
                     editor.file.col_pos -= 1;
                     solock.queue(cursor::MoveLeft(1)).unwrap();
+                    if editor.file.col_pos < editor.file.col_scroll_pos {
+                        editor.file.col_scroll_pos -= 1;
+                        editor.print_screen(&mut solock);
+                    }
                 }
             }
             EditorAction::MoveDown => {
@@ -164,8 +211,8 @@ fn main() -> io::Result<()> {
                     editor.file.row_pos += 1;
                     solock.queue(cursor::MoveDown(1)).unwrap();
                 }
-                if editor.file.row_pos >= editor.file.scroll_pos + editor.num_rows {
-                    editor.file.scroll_pos += 1;
+                if editor.file.row_pos >= editor.file.row_scroll_pos + editor.num_rows {
+                    editor.file.row_scroll_pos += 1;
                     queue!(
                         solock,
                         cursor::SavePosition,
@@ -186,8 +233,8 @@ fn main() -> io::Result<()> {
                     editor.file.row_pos -= 1;
                     solock.queue(cursor::MoveUp(1)).unwrap();
                 }
-                if editor.file.row_pos < editor.file.scroll_pos {
-                    editor.file.scroll_pos -= 1;
+                if editor.file.row_pos < editor.file.row_scroll_pos {
+                    editor.file.row_scroll_pos -= 1;
                     queue!(
                         solock,
                         cursor::SavePosition,
@@ -207,6 +254,10 @@ fn main() -> io::Result<()> {
                 if editor.file.col_pos < editor.file.lines[editor.file.row_pos].chars.len() {
                     editor.file.col_pos += 1;
                     solock.queue(cursor::MoveRight(1)).unwrap();
+                    if editor.file.col_pos >= editor.num_cols + editor.file.col_scroll_pos {
+                        editor.file.col_scroll_pos += 1;
+                        editor.print_screen(&mut solock);
+                    }
                 }
             }
             EditorAction::InsertMode => {
