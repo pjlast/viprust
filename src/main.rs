@@ -104,7 +104,7 @@ impl Editor {
             .take(self.num_rows)
             .peekable();
 
-        queue!(solock, cursor::SavePosition, cursor::MoveTo(0, 0),).unwrap();
+        queue!(solock, cursor::MoveTo(0, 0)).unwrap();
         while let Some(line) = iter.next() {
             if iter.peek().is_some() {
                 queue!(
@@ -136,7 +136,14 @@ impl Editor {
                 .unwrap();
             }
         }
-        queue!(solock, cursor::RestorePosition).unwrap();
+        queue!(
+            solock,
+            cursor::MoveTo(
+                (self.file.col_pos - self.file.col_scroll_pos) as u16,
+                (self.file.row_pos - self.file.row_scroll_pos) as u16,
+            )
+        )
+        .unwrap();
     }
 }
 
@@ -187,6 +194,19 @@ fn main() -> io::Result<()> {
 
     loop {
         let event = read().expect("Failed to read");
+        match event {
+            Event::Resize(cols, rows) => {
+                editor.num_cols = cols as usize;
+                editor.num_rows = rows as usize;
+                if editor.num_cols < editor.file.col_pos - editor.file.col_scroll_pos {
+                    editor.file.col_scroll_pos = editor.file.col_pos - editor.num_cols;
+                }
+                editor.print_screen(&mut solock);
+                solock.flush()?;
+                continue;
+            }
+            _ => {}
+        };
 
         let action = &editor.process_input(event);
 
@@ -203,39 +223,39 @@ fn main() -> io::Result<()> {
                 }
             }
             EditorAction::MoveDown => {
-                if editor.file.row_pos < editor.file.lines.len() {
+                if editor.file.row_pos + 1 < editor.file.lines.len() {
                     editor.file.row_pos += 1;
                     solock.queue(cursor::MoveDown(1)).unwrap();
-                }
-                if editor.file.row_pos >= editor.file.row_scroll_pos + editor.num_rows {
-                    editor.file.row_scroll_pos += 1;
-                    queue!(
-                        solock,
-                        cursor::SavePosition,
-                        cursor::MoveToColumn(0),
-                        terminal::ScrollUp(1),
-                        Print(
-                            &editor.file.lines[editor.file.row_pos]
-                                .chars
-                                .chars()
-                                .skip(editor.file.col_scroll_pos)
-                                .take(editor.num_cols)
-                                .collect::<String>()
-                        ),
-                        cursor::RestorePosition,
-                    )?;
-                }
-                let row_len = editor.file.lines[editor.file.row_pos].chars.len();
-                if editor.file.col_scroll_pos > row_len {
-                    editor.file.col_scroll_pos = row_len;
-                    editor.print_screen(&mut solock);
-                }
-                if editor.file.col_pos > row_len {
-                    editor.file.col_pos = row_len;
-                    queue!(
-                        solock,
-                        cursor::MoveToColumn((row_len - editor.file.col_scroll_pos) as u16)
-                    )?;
+                    if editor.file.row_pos >= editor.file.row_scroll_pos + editor.num_rows {
+                        editor.file.row_scroll_pos += 1;
+                        queue!(
+                            solock,
+                            cursor::SavePosition,
+                            cursor::MoveToColumn(0),
+                            terminal::ScrollUp(1),
+                            Print(
+                                &editor.file.lines[editor.file.row_pos]
+                                    .chars
+                                    .chars()
+                                    .skip(editor.file.col_scroll_pos)
+                                    .take(editor.num_cols)
+                                    .collect::<String>()
+                            ),
+                            cursor::RestorePosition,
+                        )?;
+                    }
+                    let row_len = editor.file.lines[editor.file.row_pos].chars.len();
+                    if editor.file.col_scroll_pos > row_len {
+                        editor.file.col_scroll_pos = row_len;
+                        editor.print_screen(&mut solock);
+                    }
+                    if editor.file.col_pos > row_len {
+                        editor.file.col_pos = row_len;
+                        queue!(
+                            solock,
+                            cursor::MoveToColumn((row_len - editor.file.col_scroll_pos) as u16)
+                        )?;
+                    }
                 }
             }
             EditorAction::MoveUp => {
