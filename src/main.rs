@@ -330,17 +330,22 @@ fn main() -> io::Result<()> {
                     editor.file.lines[editor.file.row_pos]
                         .chars
                         .remove(editor.file.col_pos);
-                    queue!(solock, cursor::MoveLeft(1), cursor::SavePosition)?;
-                    write!(
-                        solock,
-                        "{}",
-                        &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
-                    )?;
-                    queue!(
-                        solock,
-                        terminal::Clear(terminal::ClearType::UntilNewLine),
-                        cursor::RestorePosition
-                    )?;
+                    if editor.file.col_pos < editor.file.col_scroll_pos {
+                        editor.file.col_scroll_pos -= 1;
+                        editor.print_screen(&mut solock);
+                    } else {
+                        queue!(solock, cursor::MoveLeft(1), cursor::SavePosition)?;
+                        write!(
+                            solock,
+                            "{}",
+                            &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
+                        )?;
+                        queue!(
+                            solock,
+                            terminal::Clear(terminal::ClearType::UntilNewLine),
+                            cursor::RestorePosition
+                        )?;
+                    }
                 } else if editor.file.row_pos > 0 {
                     queue!(solock, terminal::Clear(terminal::ClearType::CurrentLine))?;
                     let current_line = editor.file.lines.remove(editor.file.row_pos);
@@ -397,6 +402,10 @@ fn main() -> io::Result<()> {
                             Print(&editor.file.lines[editor.file.row_pos].chars),
                             cursor::MoveToColumn(editor.file.col_pos as u16)
                         )?;
+                    }
+                    if editor.file.col_pos > editor.num_cols - 1 + editor.file.col_scroll_pos {
+                        editor.file.col_scroll_pos = editor.file.col_pos - editor.num_cols + 1;
+                        editor.print_screen(&mut solock);
                     }
                 }
             }
