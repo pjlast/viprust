@@ -475,15 +475,20 @@ fn main() -> io::Result<()> {
                     .chars
                     .insert(editor.file.col_pos, *c);
                 editor.file.col_pos += 1;
-                write!(solock, "{}", { c }).unwrap();
-                solock.queue(cursor::SavePosition).unwrap();
-                write!(
-                    solock,
-                    "{}",
-                    &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
-                )
-                .unwrap();
-                solock.queue(cursor::RestorePosition).unwrap();
+                if editor.file.col_pos >= editor.file.col_scroll_pos + editor.num_cols {
+                    editor.file.col_scroll_pos += 1;
+                    editor.print_screen(&mut solock);
+                } else {
+                    write!(solock, "{}", { c }).unwrap();
+                    solock.queue(cursor::SavePosition).unwrap();
+                    write!(
+                        solock,
+                        "{}",
+                        &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
+                    )
+                    .unwrap();
+                    solock.queue(cursor::RestorePosition).unwrap();
+                }
             }
             EditorAction::NoOp => continue,
         };
