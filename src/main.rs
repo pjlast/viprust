@@ -338,7 +338,15 @@ fn main() -> io::Result<()> {
                         write!(
                             solock,
                             "{}",
-                            &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
+                            &editor.file.lines[editor.file.row_pos]
+                                .chars
+                                .chars()
+                                .skip(editor.file.col_pos)
+                                .take(
+                                    editor.file.col_scroll_pos + editor.num_cols
+                                        - editor.file.col_pos
+                                )
+                                .collect::<String>()
                         )?;
                         queue!(
                             solock,
@@ -358,7 +366,14 @@ fn main() -> io::Result<()> {
                         editor.file.row_scroll_pos -= 1;
                         queue!(
                             solock,
-                            Print(&editor.file.lines[editor.file.row_pos].chars,),
+                            Print(
+                                &editor.file.lines[editor.file.row_pos]
+                                    .chars
+                                    .chars()
+                                    .skip(editor.file.col_scroll_pos)
+                                    .take(editor.num_cols)
+                                    .collect::<String>(),
+                            ),
                             cursor::MoveTo(editor.file.col_pos as u16, 0),
                         )?;
                     } else if editor.file.row_pos + 2 - editor.file.row_scroll_pos
@@ -394,15 +409,20 @@ fn main() -> io::Result<()> {
                             terminal::Clear(terminal::ClearType::UntilNewLine),
                         )?;
                     }
-                    if editor.file.row_pos != editor.file.row_scroll_pos {
-                        queue!(
-                            solock,
-                            cursor::RestorePosition,
-                            cursor::MoveToPreviousLine(1),
-                            Print(&editor.file.lines[editor.file.row_pos].chars),
-                            cursor::MoveToColumn(editor.file.col_pos as u16)
-                        )?;
-                    }
+                    queue!(
+                        solock,
+                        cursor::RestorePosition,
+                        cursor::MoveToPreviousLine(1),
+                        Print(
+                            &editor.file.lines[editor.file.row_pos]
+                                .chars
+                                .chars()
+                                .skip(editor.file.col_scroll_pos)
+                                .take(editor.num_cols)
+                                .collect::<String>()
+                        ),
+                        cursor::MoveToColumn(editor.file.col_pos as u16)
+                    )?;
                     if editor.file.col_pos > editor.num_cols - 1 + editor.file.col_scroll_pos {
                         editor.file.col_scroll_pos = editor.file.col_pos - editor.num_cols + 1;
                         editor.print_screen(&mut solock);
