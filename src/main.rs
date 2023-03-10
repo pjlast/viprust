@@ -453,22 +453,27 @@ fn main() -> io::Result<()> {
                     .lines
                     .insert(editor.file.row_pos, Line { chars: new_line });
 
-                // Scroll down the terminal and print the new line
-                queue!(
-                    solock,
-                    cursor::SavePosition,
-                    Print(format!(
-                        "\x1b[{};{}r",
-                        editor.file.row_pos + 1,
-                        editor.num_rows
-                    )),
-                    terminal::ScrollDown(1),
-                    Print("\x1b[r"),
-                    cursor::RestorePosition,
-                    terminal::Clear(terminal::ClearType::CurrentLine),
-                    Print(&editor.file.lines[editor.file.row_pos].chars),
-                    cursor::MoveToColumn(0),
-                )?;
+                if editor.file.col_scroll_pos > 0 {
+                    editor.file.col_scroll_pos = 0;
+                    editor.print_screen(&mut solock);
+                } else {
+                    // Scroll down the terminal and print the new line
+                    queue!(
+                        solock,
+                        cursor::SavePosition,
+                        Print(format!(
+                            "\x1b[{};{}r",
+                            editor.file.row_pos + 1,
+                            editor.num_rows
+                        )),
+                        terminal::ScrollDown(1),
+                        Print("\x1b[r"),
+                        cursor::RestorePosition,
+                        terminal::Clear(terminal::ClearType::CurrentLine),
+                        Print(&editor.file.lines[editor.file.row_pos].chars),
+                        cursor::MoveToColumn(0),
+                    )?;
+                }
             }
             EditorAction::InsertChar(c) => {
                 editor.file.lines[editor.file.row_pos]
