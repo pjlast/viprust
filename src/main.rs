@@ -342,27 +342,62 @@ fn main() -> io::Result<()> {
                         cursor::RestorePosition
                     )?;
                 } else if editor.file.row_pos > 0 {
+                    queue!(solock, terminal::Clear(terminal::ClearType::CurrentLine))?;
                     let current_line = editor.file.lines.remove(editor.file.row_pos);
                     editor.file.row_pos -= 1;
                     editor.file.col_pos = editor.file.lines[editor.file.row_pos].chars.len();
                     editor.file.lines[editor.file.row_pos]
                         .chars
                         .push_str(&current_line.chars);
-                    queue!(
-                        solock,
-                        cursor::SavePosition,
-                        Print(format!(
-                            "\x1b[{};{}r",
-                            editor.file.row_pos + 2,
-                            editor.num_rows
-                        )),
-                        terminal::ScrollUp(1),
-                        Print("\x1b[r"),
-                        cursor::RestorePosition,
-                        cursor::MoveToPreviousLine(1),
-                        Print(&editor.file.lines[editor.file.row_pos].chars),
-                        cursor::MoveToColumn(editor.file.col_pos as u16)
-                    )?;
+                    if editor.file.row_pos + 1 == editor.file.row_scroll_pos {
+                        editor.file.row_scroll_pos -= 1;
+                        queue!(
+                            solock,
+                            Print(&editor.file.lines[editor.file.row_pos].chars,),
+                            cursor::MoveTo(editor.file.col_pos as u16, 0),
+                        )?;
+                    } else if editor.file.row_pos + 2 - editor.file.row_scroll_pos
+                        != editor.num_rows
+                    {
+                        queue!(
+                            solock,
+                            cursor::SavePosition,
+                            Print(format!(
+                                "\x1b[{};{}r",
+                                editor.file.row_pos + 2 - editor.file.row_scroll_pos,
+                                editor.num_rows
+                            )),
+                            terminal::ScrollUp(1),
+                            Print("\x1b[r")
+                        )?;
+                    }
+                    if editor.file.lines.len() > editor.num_rows + editor.file.row_scroll_pos
+                        && editor.file.row_pos != editor.file.row_scroll_pos
+                    {
+                        queue!(
+                            solock,
+                            cursor::MoveTo(0, (editor.num_rows - 1) as u16),
+                            Print(
+                                &editor.file.lines
+                                    [editor.num_rows - 1 + editor.file.row_scroll_pos]
+                                    .chars
+                                    .chars()
+                                    .skip(editor.file.col_scroll_pos)
+                                    .take(editor.num_cols)
+                                    .collect::<String>()
+                            ),
+                            terminal::Clear(terminal::ClearType::UntilNewLine),
+                        )?;
+                    }
+                    if editor.file.row_pos != editor.file.row_scroll_pos {
+                        queue!(
+                            solock,
+                            cursor::RestorePosition,
+                            cursor::MoveToPreviousLine(1),
+                            Print(&editor.file.lines[editor.file.row_pos].chars),
+                            cursor::MoveToColumn(editor.file.col_pos as u16)
+                        )?;
+                    }
                 }
             }
             // Handle enter
