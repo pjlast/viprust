@@ -1,5 +1,5 @@
 use crossterm::event::{read, Event, KeyCode, KeyEvent};
-use crossterm::style::Print;
+use crossterm::style::{Print, Stylize};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crossterm::{cursor, queue, terminal, QueueableCommand};
 use std::fs::File;
@@ -138,6 +138,13 @@ impl Editor {
         }
         queue!(
             solock,
+            cursor::MoveTo(0, (self.num_rows as u16) + 1),
+            Print("Hello".negative()),
+            Print(format!("\x1b[{};{}r", 0, self.num_rows))
+        )
+        .unwrap();
+        queue!(
+            solock,
             cursor::MoveTo(
                 (self.file.col_pos - self.file.col_scroll_pos) as u16,
                 (self.file.row_pos - self.file.row_scroll_pos) as u16,
@@ -148,9 +155,6 @@ impl Editor {
 }
 
 fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    let filename = &args[1];
-
     let window_size = match terminal::size() {
         Ok(size) => size,
         Err(err) => {
@@ -158,6 +162,10 @@ fn main() -> io::Result<()> {
             return Err(err);
         }
     };
+
+    let args: Vec<String> = env::args().collect();
+    let filename = &args[1];
+
     let mut editor = Editor {
         mode: EditorMode::Normal,
         file: EditorFile {
@@ -167,7 +175,7 @@ fn main() -> io::Result<()> {
             row_scroll_pos: 0,
             col_scroll_pos: 0,
         },
-        num_rows: (window_size.1 as usize),
+        num_rows: ((window_size.1 as usize) - 1),
         num_cols: (window_size.0 as usize),
     };
 
@@ -192,6 +200,7 @@ fn main() -> io::Result<()> {
 
     solock.flush().unwrap();
 
+    // Main loop
     loop {
         let event = read().expect("Failed to read");
         match event {
@@ -388,7 +397,7 @@ fn main() -> io::Result<()> {
                                 editor.num_rows
                             )),
                             terminal::ScrollUp(1),
-                            Print("\x1b[r")
+                            Print(format!("\x1b[{};{}r", 0, editor.num_rows))
                         )?;
                     }
                     if editor.file.lines.len() > editor.num_rows + editor.file.row_scroll_pos
@@ -457,22 +466,44 @@ fn main() -> io::Result<()> {
                     editor.file.col_scroll_pos = 0;
                     editor.print_screen(&mut solock);
                 } else {
-                    // Scroll down the terminal and print the new line
-                    queue!(
-                        solock,
-                        cursor::SavePosition,
-                        Print(format!(
-                            "\x1b[{};{}r",
-                            editor.file.row_pos + 1,
-                            editor.num_rows
-                        )),
-                        terminal::ScrollDown(1),
-                        Print("\x1b[r"),
-                        cursor::RestorePosition,
-                        terminal::Clear(terminal::ClearType::CurrentLine),
-                        Print(&editor.file.lines[editor.file.row_pos].chars),
-                        cursor::MoveToColumn(0),
-                    )?;
+                    if editor.file.row_pos - editor.file.row_scroll_pos == editor.num_rows {
+                        editor.file.row_scroll_pos += 1;
+                        queue!(
+                            solock,
+                            cursor::SavePosition,
+                            Print(format!("\x1b[{};{}r", 0, editor.num_rows - 1)),
+                            terminal::ScrollUp(1),
+                            Print(format!("\x1b[{};{}r", 0, editor.num_rows)),
+                            cursor::RestorePosition,
+                            Print(&editor.file.lines[editor.file.row_pos].chars),
+                            cursor::MoveToColumn(0),
+                        )?;
+                    } else {
+                        // Scroll down the terminal and print the new line
+                        if editor.file.row_pos - editor.file.row_scroll_pos == editor.num_rows - 1 {
+                            queue!(
+                                solock,
+                                Print(&editor.file.lines[editor.file.row_pos].chars),
+                                cursor::MoveToColumn(0)
+                            )?;
+                        } else {
+                            queue!(
+                                solock,
+                                cursor::SavePosition,
+                                Print(format!(
+                                    "\x1b[{};{}r",
+                                    editor.file.row_pos + 1,
+                                    editor.num_rows
+                                )),
+                                terminal::ScrollDown(1),
+                                Print(format!("\x1b[{};{}r", 0, editor.num_rows)),
+                                cursor::RestorePosition,
+                                terminal::Clear(terminal::ClearType::CurrentLine),
+                                Print(&editor.file.lines[editor.file.row_pos].chars),
+                                cursor::MoveToColumn(0),
+                            )?;
+                        }
+                    }
                 }
             }
             EditorAction::InsertChar(c) => {
