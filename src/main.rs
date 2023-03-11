@@ -32,6 +32,7 @@ enum EditorAction {
 
 struct EditorFile {
     lines: Vec<Line>,
+    name: String,
     row_pos: usize,
     col_pos: usize,
     row_scroll_pos: usize,
@@ -49,6 +50,7 @@ impl Editor {
     fn open_file(&mut self, filename: &str) -> io::Result<()> {
         let file = File::open(filename)?;
         let mut editor_file = EditorFile {
+            name: String::from(filename),
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
@@ -139,7 +141,7 @@ impl Editor {
         queue!(
             solock,
             cursor::MoveTo(0, (self.num_rows as u16) + 1),
-            Print("Hello".negative()),
+            Print(self.file.name.as_str().negative()),
             Print(format!("\x1b[{};{}r", 0, self.num_rows))
         )
         .unwrap();
@@ -169,6 +171,7 @@ fn main() -> io::Result<()> {
     let mut editor = Editor {
         mode: EditorMode::Normal,
         file: EditorFile {
+            name: "".to_string(),
             lines: Vec::new(),
             row_pos: 0,
             col_pos: 0,
