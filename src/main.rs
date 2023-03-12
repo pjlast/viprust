@@ -13,6 +13,7 @@ struct Line {
 enum EditorMode {
     Normal,
     Insert,
+    Command,
 }
 
 enum EditorAction {
@@ -22,6 +23,7 @@ enum EditorAction {
     MoveUp,
     Save,
     InsertMode,
+    CommandMode,
     Quit,
     NormalMode,
     Backspace,
@@ -78,6 +80,7 @@ impl Editor {
                     KeyCode::Right | KeyCode::Char('l') => EditorAction::MoveRight,
                     KeyCode::Left | KeyCode::Char('h') => EditorAction::MoveLeft,
                     KeyCode::Char('i') => EditorAction::InsertMode,
+                    KeyCode::Char(':') => EditorAction::CommandMode,
                     KeyCode::Char('q') => EditorAction::Quit,
                     KeyCode::Char('s') => EditorAction::Save,
                     _ => EditorAction::NoOp,
@@ -90,6 +93,13 @@ impl Editor {
                     KeyCode::Backspace => EditorAction::Backspace,
                     KeyCode::Enter => EditorAction::SplitLine,
                     KeyCode::Char(c) => EditorAction::InsertChar(c),
+                    _ => EditorAction::NoOp,
+                },
+                _ => EditorAction::NoOp,
+            },
+            EditorMode::Command => match event {
+                Event::Key(KeyEvent { code, .. }) => match code {
+                    KeyCode::Esc => EditorAction::NormalMode,
                     _ => EditorAction::NoOp,
                 },
                 _ => EditorAction::NoOp,
@@ -141,7 +151,14 @@ impl Editor {
         queue!(
             solock,
             cursor::MoveTo(0, (self.num_rows as u16) + 1),
-            Print(self.file.name.as_str().negative()),
+            Print(
+                format!(
+                    "{}{}",
+                    self.file.name.as_str(),
+                    " ".repeat(self.num_cols - self.file.name.len())
+                )
+                .negative()
+            ),
             Print(format!("\x1b[{};{}r", 0, self.num_rows))
         )
         .unwrap();
@@ -316,6 +333,9 @@ fn main() -> io::Result<()> {
             EditorAction::InsertMode => {
                 editor.mode = EditorMode::Insert;
                 solock.queue(cursor::SetCursorStyle::SteadyBar).unwrap();
+            }
+            EditorAction::CommandMode => {
+                editor.mode = EditorMode::Command;
             }
             EditorAction::Save => {
                 let lines = editor
