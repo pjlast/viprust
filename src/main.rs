@@ -24,6 +24,8 @@ enum EditorAction {
     Save,
     InsertMode,
     CommandMode,
+    CommandChar(char),
+    CommandEnter,
     Quit,
     NormalMode,
     Backspace,
@@ -44,6 +46,7 @@ struct EditorFile {
 struct Editor {
     mode: EditorMode,
     file: EditorFile,
+    command: String,
     num_rows: usize,
     num_cols: usize,
 }
@@ -100,6 +103,8 @@ impl Editor {
             EditorMode::Command => match event {
                 Event::Key(KeyEvent { code, .. }) => match code {
                     KeyCode::Esc => EditorAction::NormalMode,
+                    KeyCode::Enter => EditorAction::CommandEnter,
+                    KeyCode::Char(c) => EditorAction::CommandChar(c),
                     _ => EditorAction::NoOp,
                 },
                 _ => EditorAction::NoOp,
@@ -193,6 +198,7 @@ fn main() -> io::Result<()> {
             row_scroll_pos: 0,
             col_scroll_pos: 0,
         },
+        command: "".to_string(),
         num_rows: ((window_size.1 as usize) - 1),
         num_cols: (window_size.0 as usize),
     };
@@ -542,6 +548,30 @@ fn main() -> io::Result<()> {
                     .unwrap();
                     solock.queue(cursor::RestorePosition).unwrap();
                 }
+            }
+            EditorAction::CommandChar(c) => {
+                editor.command += c.to_string().as_str();
+                editor.print_status_bar(&mut solock, format!(":{}", editor.command).as_str());
+            }
+            EditorAction::CommandEnter => {
+                match editor.command.as_str() {
+                    "w" => {
+                        let lines = editor
+                            .file
+                            .lines
+                            .iter()
+                            .map(|l| l.chars.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        fs::write("testfile.rs", lines).expect("Could not write file");
+                    }
+                    "q" => break,
+                    _ => {}
+                }
+                editor.command.clear();
+                editor.mode = EditorMode::Normal;
+                editor.print_status_bar(&mut solock, &editor.file.name);
             }
             EditorAction::NoOp => continue,
         };
