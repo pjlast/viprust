@@ -148,26 +148,24 @@ impl Editor {
                 .unwrap();
             }
         }
-        queue!(
-            solock,
-            cursor::MoveTo(0, (self.num_rows as u16) + 1),
-            Print(
-                format!(
-                    "{}{}",
-                    self.file.name.as_str(),
-                    " ".repeat(self.num_cols - self.file.name.len())
-                )
-                .negative()
-            ),
-            Print(format!("\x1b[{};{}r", 0, self.num_rows))
-        )
-        .unwrap();
+        self.print_status_bar(solock, self.file.name.as_str());
         queue!(
             solock,
             cursor::MoveTo(
                 (self.file.col_pos - self.file.col_scroll_pos) as u16,
                 (self.file.row_pos - self.file.row_scroll_pos) as u16,
             )
+        )
+        .unwrap();
+    }
+
+    fn print_status_bar(&self, solock: &mut StdoutLock, status: &str) {
+        queue!(
+            solock,
+            cursor::SavePosition,
+            cursor::MoveTo(0, (self.num_rows as u16) + 1),
+            Print(format!("{}{}", status, " ".repeat(self.num_cols - status.len())).negative()),
+            cursor::RestorePosition,
         )
         .unwrap();
     }
@@ -336,6 +334,7 @@ fn main() -> io::Result<()> {
             }
             EditorAction::CommandMode => {
                 editor.mode = EditorMode::Command;
+                editor.print_status_bar(&mut solock, ":");
             }
             EditorAction::Save => {
                 let lines = editor
@@ -351,6 +350,7 @@ fn main() -> io::Result<()> {
             EditorAction::NormalMode => {
                 solock.queue(cursor::SetCursorStyle::SteadyBlock).unwrap();
                 editor.mode = EditorMode::Normal;
+                editor.print_status_bar(&mut solock, editor.file.name.as_str());
             }
             // Handle backspace
             EditorAction::Backspace => {
