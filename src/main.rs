@@ -220,6 +220,8 @@ fn main() -> io::Result<()> {
 
     editor.print_screen(&mut solock);
 
+    queue!(solock, Print(format!("\x1b[{};{}r", 1, editor.num_rows)))?;
+
     solock.queue(cursor::MoveTo(0, 0)).unwrap();
 
     solock.flush().unwrap();
