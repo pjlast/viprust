@@ -25,6 +25,7 @@ enum EditorAction {
     MoveToEndOfLine,
     Save,
     InsertMode,
+    Append,
     CommandMode,
     CommandChar(char),
     CommandEnter,
@@ -90,6 +91,7 @@ impl Editor {
                     KeyCode::Char('s') => EditorAction::Save,
                     KeyCode::Char('0') => EditorAction::MoveToStartOfLine,
                     KeyCode::Char('$') => EditorAction::MoveToEndOfLine,
+                    KeyCode::Char('a') => EditorAction::Append,
                     _ => EditorAction::NoOp,
                 },
                 _ => EditorAction::NoOp,
@@ -363,6 +365,19 @@ fn main() -> io::Result<()> {
                 editor.mode = EditorMode::Insert;
                 solock.queue(cursor::SetCursorStyle::SteadyBar).unwrap();
             }
+            EditorAction::Append => {
+                editor.mode = EditorMode::Insert;
+                if editor.file.col_pos < editor.file.lines[editor.file.row_pos].chars.len() {
+                    editor.file.col_pos += 1;
+                    if editor.file.col_pos > editor.num_cols {
+                        editor.file.col_scroll_pos += 1;
+                        editor.print_screen(&mut solock);
+                    } else {
+                        queue!(solock, cursor::MoveRight(1))?;
+                    }
+                }
+                queue!(solock, cursor::SetCursorStyle::SteadyBar)?;
+            }
             EditorAction::CommandMode => {
                 editor.mode = EditorMode::Command;
                 editor.print_status_bar(&mut solock, ":");
@@ -565,10 +580,20 @@ fn main() -> io::Result<()> {
                 } else {
                     write!(solock, "{}", { c }).unwrap();
                     solock.queue(cursor::SavePosition).unwrap();
-                    write!(
+                    queue!(
                         solock,
-                        "{}",
-                        &editor.file.lines[editor.file.row_pos].chars[editor.file.col_pos..]
+                        cursor::SavePosition,
+                        cursor::MoveToColumn(0),
+                        terminal::Clear(terminal::ClearType::CurrentLine),
+                        Print(
+                            &editor.file.lines[editor.file.row_pos]
+                                .chars
+                                .chars()
+                                .skip(editor.file.col_scroll_pos)
+                                .take(editor.num_cols)
+                                .collect::<String>()
+                        ),
+                        cursor::RestorePosition,
                     )
                     .unwrap();
                     solock.queue(cursor::RestorePosition).unwrap();
