@@ -21,6 +21,8 @@ enum EditorAction {
     MoveDown,
     MoveRight,
     MoveUp,
+    MoveToStartOfLine,
+    MoveToEndOfLine,
     Save,
     InsertMode,
     CommandMode,
@@ -86,6 +88,8 @@ impl Editor {
                     KeyCode::Char(':') => EditorAction::CommandMode,
                     KeyCode::Char('q') => EditorAction::Quit,
                     KeyCode::Char('s') => EditorAction::Save,
+                    KeyCode::Char('0') => EditorAction::MoveToStartOfLine,
+                    KeyCode::Char('$') => EditorAction::MoveToEndOfLine,
                     _ => EditorAction::NoOp,
                 },
                 _ => EditorAction::NoOp,
@@ -336,6 +340,25 @@ fn main() -> io::Result<()> {
                     }
                 }
             }
+            EditorAction::MoveToStartOfLine => {
+                editor.file.col_pos = 0;
+                if editor.file.col_scroll_pos > 0 {
+                    editor.file.col_scroll_pos = 0;
+                    editor.print_screen(&mut solock);
+                } else {
+                    queue!(solock, cursor::MoveToColumn(0))?;
+                }
+            }
+            EditorAction::MoveToEndOfLine => {
+                editor.file.col_pos = editor.file.lines[editor.file.row_pos].chars.len();
+                if editor.file.lines[editor.file.row_pos].chars.len() > editor.num_cols {
+                    editor.file.col_scroll_pos =
+                        editor.file.lines[editor.file.row_pos].chars.len() - editor.num_cols + 1;
+                    editor.print_screen(&mut solock);
+                } else {
+                    queue!(solock, cursor::MoveToColumn(editor.file.col_pos as u16))?;
+                }
+            }
             EditorAction::InsertMode => {
                 editor.mode = EditorMode::Insert;
                 solock.queue(cursor::SetCursorStyle::SteadyBar).unwrap();
@@ -566,7 +589,7 @@ fn main() -> io::Result<()> {
                             .collect::<Vec<_>>()
                             .join("\n");
 
-                        fs::write("testfile.rs", lines).expect("Could not write file");
+                        fs::write(filename, lines).expect("Could not write file");
                     }
                     "q" => break,
                     _ => {}
